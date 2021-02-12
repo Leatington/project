@@ -202,6 +202,8 @@ local function get_value(ctype, address, unprot)
 end
 
 local function set_value(ctype, address, value, unprot)
+
+    address = ffi.cast(pvoid_t, address)
     local size = ffi.sizeof(ctype)
     local prot = unprotect_maybe(address, size, unprot)
     if not unprot or prot then
