@@ -1,60 +1,32 @@
--- Virtual memory I/O module for internal process.
---
--- This file is part of SA MoonLoader package.
--- Licensed under the MIT License.
--- Copyright (c) 2019, BlastHack Team <blast.hk>
+local ffi = require('ffi')
 
-local ffi = require 'ffi'
-local memory = {} -- all function must accept number-type address
+local memory = {}
 
-local page_access = {
-    NOACCESS          = 0x01,
-    READONLY          = 0x02,
-    READWRITE         = 0x04,
-    WRITECOPY         = 0x08,
-    EXECUTE           = 0x10,
-    EXECUTE_READ      = 0x20,
-    EXECUTE_READWRITE = 0x40,
-    EXECUTE_WRITECOPY = 0x80,
-    GUARD             = 0x100,
-    NOCACHE           = 0x200,
-    WRITECOMBINE      = 0x400,
-}
-local pvoid_t = ffi.typeof('void*')
+local pvoid_t = ffi['typeof']('void*')
 
-ffi.cdef [[
-int __stdcall VirtualProtect(void* lpAddress, unsigned long dwSize, unsigned long flNewProtect, unsigned long* lpflOldProtect);
-int memcmp(const void* ptr1, const void* ptr2, size_t num);
+ffi['cdef'][[
+	int __stdcall VirtualProtect(void* lpAddress, unsigned long dwSize, unsigned long flNewProtect, unsigned long* lpflOldProtect);
+	int memcmp(const void* ptr1, const void* ptr2, size_t num);
 ]]
 
 local function set_protection(address, size, access)
-    local old = ffi.new('unsigned long[1]')
-    -- TODO ?
-	--[[
-    MEMORY_BASIC_INFORMATION mbi = query(address);
-    if (mbi.BaseAddress == NULL)
-        return 0;
-    --]]
-    if ffi.C.VirtualProtect(address, size, access, old) == 0 then
-        return nil
-    end
-    return old[0]
-end
-
-local function unprotect(address, size)
-    return set_protection(address, size, page_access.EXECUTE_READWRITE)
+	local old = ffi['new']('unsigned long[1]')
+  if ffi['C']['VirtualProtect'](address, size, access, old) == 0 then
+		return nil
+	end
+	return old[0]
 end
 
 local function unprotect_maybe(address, size, unprot)
-    if unprot then
-        return unprotect(address, size)
-    end
+	if unprot then
+		return set_protection(address, size, 0x40)
+	end
 end
 
 local function protect_maybe(address, size, prot)
-    if prot then
-        return set_protection(address, size, prot)
-    end
+	if prot then
+		return set_protection(address, size, prot)
+	end
 end
 
 function memory.read(address, size, unprot)
@@ -93,7 +65,7 @@ end
 
 function memory.unprotect(address, size)
     address = ffi.cast(pvoid_t, address)
-    return unprotect(address, size)
+    return set_protection(address, size, 0x40)
 end
 
 function memory.protect(address, size, prot)
@@ -191,25 +163,24 @@ function memory.hex2bin(hex, dst, size)
 end
 
 local function get_value(ctype, address, unprot)
-    address = ffi.cast(pvoid_t, address)
-    local size = ffi.sizeof(ctype)
-    local prot = unprotect_maybe(address, size, unprot)
-    if not unprot or prot then
-        local val = ffi.cast(ctype..'*', address)[0]
-        protect_maybe(address, size, prot)
-        return val
-    end
+	address = ffi['cast'](pvoid_t, address)
+	local size = ffi['sizeof'](ctype)
+	local prot = unprotect_maybe(address, size, unprot)
+	if prot or not unprot then
+		local val = ffi['cast'](ctype .. '*', address)[0]
+		protect_maybe(address, size, prot)
+		return val
+	end
 end
 
 local function set_value(ctype, address, value, unprot)
-
-    address = ffi.cast(pvoid_t, address)
-    local size = ffi.sizeof(ctype)
-    local prot = unprotect_maybe(address, size, unprot)
-    if not unprot or prot then
-        ffi.cast(ctype..'*', address)[0] = value
-        protect_maybe(address, size, prot)
-    end
+	address = ffi['cast'](pvoid_t, address)
+	local size = ffi['sizeof'](ctype)
+	local prot = unprotect_maybe(address, size, unprot)
+	if prot or not unprot then
+		ffi['cast'](ctype .. '*', address)[0] = value
+		protect_maybe(address, size, prot)
+	end
 end
 
 memory.getvalue = get_value
@@ -234,6 +205,5 @@ memory.setuint32 = function(address, value, unprot) return set_value('uint32_t',
 memory.setuint64 = function(address, value, unprot) return set_value('uint64_t', address, value, unprot) end
 memory.setfloat = function(address, value, unprot) return set_value('float', address, value, unprot) end
 memory.setdouble = function(address, value, unprot) return set_value('double', address, value, unprot) end
-memory.pageaccess = page_access
 
 return memory
